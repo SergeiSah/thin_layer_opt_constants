@@ -6,7 +6,6 @@ from scipy.stats import linregress
 from sympy import Integral, oo, Symbol, Rational
 import plotly.graph_objects as go
 
-# https://github.com/utf/kramers-kronig/blob/master/kkr.ipynb
 
 reflect_df = pd.read_csv('Si_SiO2(30nm).txt',
                          sep='\s+',
@@ -14,13 +13,33 @@ reflect_df = pd.read_csv('Si_SiO2(30nm).txt',
                          names=['energy', 'reflectivity', 'transmission'])
 
 
-def kramers_kronig_relation(r_e: pd.DataFrame) -> pd.DataFrame:
-    """
-    Calculation of phase shift between reflected and incident radiation.
+def kramers_kronig_relation(r_e: pd.DataFrame, exact=False) -> pd.DataFrame:
+    r"""
+    Calculation of the phase shift between the reflected and incident radiation from the given dependency of
+    reflectivity on energy R(E).
+
+    .. math::
+        \psi(E_0) = \frac{E_0}{\pi} v.p.\int_{0}^{+\infty} \frac{ln(R(E))}{E^2 - E_0^2}\,dE
+
+    v.p. - Cauchy principal value of the integral: https://en.wikipedia.org/wiki/Cauchy_principal_value.
+
+    To calculate v.p. integral the range is divided into four ranges:
+        1. [min(E), E_0 - dE];
+        2. [E0 - dE, E0 + dE];
+        3. [E_0 + dE, max(E)].
+        4. [max(E), +infinity)
+    min(E) and max(E) - minimum and maximum values of energy in the R(E). dE - step between energies. Integrals over the
+    1st and 3rd ranges are calculated by numerical integration using `scipy.integrate.simpson`. Integration over the 2nd
+    range is conducted analytically using `scipy.integrate.quad`. R(E) in this region represented as linear function
+    R = a + b * E, determined from two points E_0 - dE and E_0 + dE.
+    The high energy tail of R(E) in the range of [max(E), +infinity) is calculated on the bases of extrapolation of the
+    R(E) by the function of a + b * E^c, where c ~ -4. Then it is integrated analytically using `scipy.integrate.quad`.
 
     :param r_e: DataFrame with columns 'energy' and 'reflectivity'
+    :param exact: If True, integration over the 2nd range will be included
     :return: Dataframe with columns 'energy' and 'phase shift'
     """
+
     def psi_e0(e0, r, form):
         # exclude point e0 (singularity) and form two regions
         r_before_e0 = r[r['energy'] < e0]
